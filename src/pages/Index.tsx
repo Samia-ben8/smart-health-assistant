@@ -1,16 +1,30 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import Navbar from "@/components/Navbar";
+import HeroSection from "@/components/HeroSection";
+import AboutSection from "@/components/AboutSection";
+import ServicesSection from "@/components/ServicesSection";
+import HowItWorksSection from "@/components/HowItWorksSection";
+import FeaturesSection from "@/components/FeaturesSection";
+import ContactSection from "@/components/ContactSection";
+import Footer from "@/components/Footer";
+import Chatbot from "@/components/Chatbot";
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+const Index = () => {
+  const [chatOpen, setChatOpen] = useState(false);
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
+    <div className="min-h-screen">
+      <Navbar />
+      <HeroSection onOpenChat={() => setChatOpen(true)} />
+      <AboutSection />
+      <ServicesSection />
+      <HowItWorksSection />
+      <FeaturesSection />
+      <ContactSection />
+      <Footer />
+      <Chatbot isOpen={chatOpen} onToggle={() => setChatOpen((v) => !v)} />
     </div>
   );
 };
-
-const Index = PlaceholderIndex;
 
 export default Index;
