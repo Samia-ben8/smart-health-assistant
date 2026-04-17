@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Bot, User } from "lucide-react";
 
-const WEBHOOK_URL = "https://n8n-webhook-url/chat";
+const WEBHOOK_URL = "http://localhost:5678/webhook-test/chat";
+const SESSION_ID = "user123";
 
 interface Message {
   id: string;
@@ -47,7 +48,7 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          history: messages.map((m) => ({ role: m.role, content: m.content })),
+          session_id: SESSION_ID,
         }),
       });
 
