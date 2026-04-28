@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Bot, User } from "lucide-react";
+import SlotPicker from "./SlotPicker";
 
 const WEBHOOK_URL = "http://localhost:5678/webhook-test/chat";
 const SESSION_ID = "user123";
+
+const SLOT_MARKER = "[SLOT_PICKER]";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  showSlotPicker?: boolean;
+  slotPickerUsed?: boolean;
 }
 
 interface ChatbotProps {
