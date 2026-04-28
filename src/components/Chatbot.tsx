@@ -38,13 +38,13 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const sendMessage = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text || loading) return;
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
-    setInput("");
+    if (!overrideText) setInput("");
     setLoading(true);
 
     try {
@@ -60,10 +60,23 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
       if (!res.ok) throw new Error("Erreur serveur");
 
       const data = await res.json();
+      const rawContent =
+        data.response || data.message || data.output || "Je n'ai pas compris. Pouvez-vous reformuler ?";
+      const action = data.action ?? data.next_step ?? data.step;
+      const showSlotPicker =
+        action === "pick_slot" ||
+        action === "choose_slot" ||
+        action === "choose_appointment_slot" ||
+        rawContent.includes(SLOT_MARKER);
+
+      const cleanContent = rawContent.replace(SLOT_MARKER, "").trim() ||
+        "Veuillez choisir une date et un créneau :";
+
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: data.response || data.message || data.output || "Je n'ai pas compris. Pouvez-vous reformuler ?",
+        content: cleanContent,
+        showSlotPicker,
       };
       setMessages((prev) => [...prev, botMsg]);
     } catch {
@@ -78,6 +91,13 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSlotSelect = (msgId: string, date: string, time: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, slotPickerUsed: true } : m)),
+    );
+    sendMessage(JSON.stringify({ date, time }));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
