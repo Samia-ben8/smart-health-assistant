@@ -215,7 +215,7 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
                   className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground"
                 />
                 <button
-                  onClick={sendMessage}
+                  onClick={() => sendMessage()}
                   disabled={!input.trim() || loading}
                   className="w-9 h-9 rounded-lg bg-gradient-hero flex items-center justify-center text-primary-foreground disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0"
                 >
