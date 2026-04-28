@@ -47,15 +47,24 @@ interface Appointment {
 }
 
 // Normalize backend variants into our Appointment shape
-const normalize = (raw: any, idx: number): Appointment => ({
-  id: raw.id ?? idx,
-  patient_name: raw.patient_name ?? raw.name ?? raw.patient ?? "—",
-  phone: raw.phone ?? raw.telephone ?? raw.tel ?? "—",
-  motif: raw.motif ?? raw.reason ?? raw.subject ?? "—",
-  urgency: (raw.urgency ?? raw.urgence ?? "non_urgent").toString().toLowerCase(),
-  date: raw.date ?? raw.appointment_date ?? "",
-  time: raw.time ?? raw.heure ?? raw.appointment_time ?? "",
-});
+const normalize = (raw: any, idx: number): Appointment => {
+  const rawUrgency = raw.urgency ?? raw.urgence;
+  let urgency = "non_urgent";
+  if (typeof rawUrgency === "boolean") {
+    urgency = rawUrgency ? "urgent" : "non_urgent";
+  } else if (rawUrgency != null) {
+    urgency = rawUrgency.toString().toLowerCase();
+  }
+  return {
+    id: raw.id ?? idx,
+    patient_name: raw.patient_name ?? raw.name ?? raw.patient ?? "—",
+    phone: raw.phone ?? raw.telephone ?? raw.tel ?? "—",
+    motif: raw.motif ?? raw.reason ?? raw.subject ?? "—",
+    urgency,
+    date: raw.date ?? raw.appointment_date ?? "",
+    time: raw.time ?? raw.heure ?? raw.appointment_time ?? "",
+  };
+};
 
 const isUrgent = (u: string) => u === "urgent" || u === "urgente" || u === "high";
 
