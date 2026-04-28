@@ -1,19 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Bot, User } from "lucide-react";
-import SlotPicker from "./SlotPicker";
 
-const WEBHOOK_URL = "http://localhost:5678/webhook-test/chat";
-const SESSION_ID = "user123";
+const WEBHOOK_URL = "http://localhost:5678/webhook/chat";
 
-const SLOT_MARKER = "[SLOT_PICKER]";
+// ⚠️ session simple (à améliorer plus tard)
+const SESSION_ID = "user_" + Math.random().toString(36).substring(2, 9);
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  showSlotPicker?: boolean;
-  slotPickerUsed?: boolean;
 }
 
 interface ChatbotProps {
@@ -27,9 +24,10 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
       id: "welcome",
       role: "assistant",
       content:
-        "Bonjour ! 👋 Je suis l'assistant du Cabinet Médical Intelligent. Comment puis-je vous aider aujourd'hui ?\n\nVous pouvez me demander de :\n• Prendre un rendez-vous\n• Modifier un rendez-vous existant\n• Poser une question médicale",
+        "Bonjour 👋 Je suis l'assistant du Cabinet Médical Intelligent.\n\nJe peux vous aider à :\n• Prendre un rendez-vous\n• Modifier un rendez-vous\n• Répondre à vos questions\n Quel est votre nom et prénom",
     },
   ]);
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -38,13 +36,18 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async (overrideText?: string) => {
-    const text = (overrideText ?? input).trim();
+  const sendMessage = async () => {
+    const text = input.trim();
     if (!text || loading) return;
 
-    const userMsg: Message = { id: Date.now().toString(), role: "user", content: text };
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: text,
+    };
+
     setMessages((prev) => [...prev, userMsg]);
-    if (!overrideText) setInput("");
+    setInput("");
     setLoading(true);
 
     try {
@@ -60,44 +63,28 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
       if (!res.ok) throw new Error("Erreur serveur");
 
       const data = await res.json();
-      const rawContent =
-        data.response || data.message || data.output || "Je n'ai pas compris. Pouvez-vous reformuler ?";
-      const action = data.action ?? data.next_step ?? data.step;
-      const showSlotPicker =
-        action === "pick_slot" ||
-        action === "choose_slot" ||
-        action === "choose_appointment_slot" ||
-        rawContent.includes(SLOT_MARKER);
-
-      const cleanContent = rawContent.replace(SLOT_MARKER, "").trim() ||
-        "Veuillez choisir une date et un créneau :";
 
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: cleanContent,
-        showSlotPicker,
+        content:
+          data.reply || "Je n'ai pas compris, pouvez-vous reformuler ?",
       };
+
       setMessages((prev) => [...prev, botMsg]);
-    } catch {
+    } catch (error) {
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: "Désolé, je ne suis pas disponible pour le moment. Veuillez réessayer plus tard ou nous contacter par téléphone.",
+          content:
+            "Erreur de connexion au serveur. Vérifiez que n8n et le backend sont lancés.",
         },
       ]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSlotSelect = (msgId: string, date: string, time: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msgId ? { ...m, slotPickerUsed: true } : m)),
-    );
-    sendMessage(JSON.stringify({ date, time }));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -117,7 +104,7 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
             animate={{ scale: 1 }}
             exit={{ scale: 0 }}
             onClick={onToggle}
-            className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full bg-gradient-hero flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity animate-float"
+            className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full bg-gradient-hero flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
           >
             <MessageCircle size={28} className="text-primary-foreground" />
           </motion.button>
@@ -127,101 +114,46 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
       {/* Chat window */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-3rem)] bg-card rounded-2xl shadow-chat border border-border flex flex-col overflow-hidden"
-          >
+          <motion.div className="fixed bottom-6 right-6 z-50 w-[380px] h-[560px] bg-card rounded-2xl shadow-chat border flex flex-col overflow-hidden">
+            
             {/* Header */}
-            <div className="bg-gradient-hero px-5 py-4 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary-foreground/20 flex items-center justify-center">
-                  <Bot size={20} className="text-primary-foreground" />
-                </div>
-                <div>
-                  <div className="text-primary-foreground font-semibold text-sm">Assistant Médical</div>
-                  <div className="text-primary-foreground/70 text-xs">En ligne</div>
-                </div>
+            <div className="bg-gradient-hero px-5 py-4 flex justify-between">
+              <div className="flex items-center gap-2">
+                <Bot size={18} />
+                <span className="text-sm text-white">Assistant Médical</span>
               </div>
-              <button onClick={onToggle} className="text-primary-foreground/80 hover:text-primary-foreground">
-                <X size={20} />
+              <button onClick={onToggle}>
+                <X size={18} />
               </button>
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg) => (
-                <div key={msg.id} className="space-y-2">
-                  <div className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                    <div
-                      className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center ${
-                        msg.role === "assistant" ? "bg-accent" : "bg-gradient-hero"
-                      }`}
-                    >
-                      {msg.role === "assistant" ? (
-                        <Bot size={14} className="text-primary" />
-                      ) : (
-                        <User size={14} className="text-primary-foreground" />
-                      )}
-                    </div>
-                    <div
-                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                        msg.role === "assistant"
-                          ? "bg-muted text-foreground rounded-tl-sm"
-                          : "bg-gradient-hero text-primary-foreground rounded-tr-sm"
-                      }`}
-                    >
-                      {msg.content}
-                    </div>
+                <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : ""}`}>
+                  <div className="max-w-[70%] bg-muted p-3 rounded-xl text-sm">
+                    {msg.content}
                   </div>
-                  {msg.showSlotPicker && (
-                    <div className="pl-9 pr-2">
-                      <SlotPicker
-                        disabled={msg.slotPickerUsed}
-                        onSelect={(date, time) => handleSlotSelect(msg.id, date, time)}
-                      />
-                    </div>
-                  )}
                 </div>
               ))}
 
-              {loading && (
-                <div className="flex gap-2.5">
-                  <div className="w-7 h-7 rounded-full shrink-0 bg-accent flex items-center justify-center">
-                    <Bot size={14} className="text-primary" />
-                  </div>
-                  <div className="bg-muted px-4 py-3 rounded-2xl rounded-tl-sm">
-                    <div className="flex gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-pulse-soft" />
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-pulse-soft [animation-delay:0.2s]" />
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-pulse-soft [animation-delay:0.4s]" />
-                    </div>
-                  </div>
-                </div>
-              )}
+              {loading && <div className="text-sm text-gray-400">...</div>}
+
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
-            <div className="p-3 border-t border-border shrink-0">
-              <div className="flex items-center gap-2 bg-muted rounded-xl px-4 py-2">
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Écrivez votre message..."
-                  className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground"
-                />
-                <button
-                  onClick={() => sendMessage()}
-                  disabled={!input.trim() || loading}
-                  className="w-9 h-9 rounded-lg bg-gradient-hero flex items-center justify-center text-primary-foreground disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0"
-                >
-                  <Send size={16} />
-                </button>
-              </div>
+            <div className="p-3 border-t flex gap-2">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Votre message..."
+                className="flex-1 border rounded-lg px-3 py-2 text-sm"
+              />
+              <button onClick={sendMessage} disabled={loading}>
+                <Send size={18} />
+              </button>
             </div>
           </motion.div>
         )}
