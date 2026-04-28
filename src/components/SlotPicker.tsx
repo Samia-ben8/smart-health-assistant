@@ -49,7 +49,7 @@ const SlotPicker = ({ onSelect, disabled }: SlotPickerProps) => {
           if (typeof s === "string") return { time: s, available: true };
           return {
             time: s.time ?? s.hour ?? s.slot ?? "",
-            available: s.available ?? s.is_available ?? !s.taken ?? true,
+            available: s.available ?? s.is_available ?? (s.taken === undefined ? true : !s.taken),
           };
         }).filter((s: Slot) => s.time);
         setSlots(normalized);
