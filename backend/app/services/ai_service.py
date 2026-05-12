@@ -411,35 +411,17 @@ demander validation
 
     if session["step"] == "propose_slots":
 
-        slots = get_available_slots()
-
-        if not slots:
-
-            return generate_natural_response(
-                message,
-                data,
-                "aucun créneau disponible"
-            )
-
-        session["slots"] = slots
+        session["slots"] = []
 
         session["step"] = "waiting_slot"
 
         intro = generate_natural_response(
             message,
             data,
-            "proposer créneaux disponibles"
+            "inviter l'utilisateur à choisir une date et un créneau dans le calendrier"
         )
 
-        msg = intro + "\n\n"
-
-        for i, s in enumerate(slots):
-
-            msg += f"{i+1}. {s['time']}\n"
-
-        msg += "\nChoisissez le numéro du créneau."
-
-        return msg
+        return intro + " [SLOT_PICKER]"
 
     # ---------------- FALLBACK ---------------- #
 
