@@ -155,17 +155,35 @@ def generate_response(message: str, session_id: str):
 
     if current_step == "waiting_slot":
 
+        selected = None
+
+        # 🔹 Tentative de parser un JSON {"date": "...", "time": "..."} envoyé par le SlotPicker
         try:
-            choice = int(message) - 1
+            payload = json.loads(message)
+            if isinstance(payload, dict) and payload.get("date") and payload.get("time"):
+                from app.services.db_service import is_slot_available
+                if is_slot_available(payload["date"], payload["time"]):
+                    selected = {"date": payload["date"], "time": payload["time"]}
+                else:
+                    return generate_natural_response(
+                        message,
+                        data,
+                        "créneau déjà pris, demander un autre choix [SLOT_PICKER]"
+                    ) + " [SLOT_PICKER]"
+        except Exception:
+            pass
 
-            selected = session["slots"][choice]
-
-        except:
-            return generate_natural_response(
-                message,
-                data,
-                "choix créneau invalide"
-            )
+        # 🔹 Fallback : index numérique (rétrocompatibilité)
+        if selected is None:
+            try:
+                choice = int(message.strip()) - 1
+                selected = session["slots"][choice]
+            except Exception:
+                return generate_natural_response(
+                    message,
+                    data,
+                    "choix créneau invalide [SLOT_PICKER]"
+                ) + " [SLOT_PICKER]"
 
         session["selected_slot"] = selected
 
