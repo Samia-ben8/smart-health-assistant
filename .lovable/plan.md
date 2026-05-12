@@ -1,76 +1,65 @@
-## Admin Dashboard — Page de gestion des rendez-vous
+# Connecter le SlotPicker au backend
 
-Création d'une page administrateur dédiée pour visualiser et filtrer les rendez-vous récupérés depuis l'API backend (`http://localhost:8000/appointments`).
+## Problèmes identifiés
 
-### Route
+1. **Le Chatbot ne rend plus le SlotPicker** — `src/components/Chatbot.tsx` actuel n'importe pas `SlotPicker` et n'a aucune logique pour l'afficher. Le composant existe mais est orphelin.
+2. **Le backend n'émet aucun signal pour déclencher le picker** — Dans `conversation_service.py` (en réalité `ai_service.py`), à l'étape `propose_slots`, le backend renvoie une liste numérotée en texte (`1. 09:00 …`) et attend un numéro à l'étape `waiting_slot`. Aucun champ `action: "pick_slot"` ni marqueur `[SLOT_PICKER]` n'est renvoyé.
+3. `**waiting_slot` n'accepte qu'un index numérique** — il ne sait pas parser un JSON `{"date":"…","time":"…"}` envoyé par le picker.
+4. `**/availability` fonctionne déjà** ✅ — pas de changement nécessaire côté endpoint, le SlotPicker l'appelle correctement.
 
-- Nouvelle route : `/admin` (ajoutée dans `src/App.tsx` avant la route catch-all).
-- avec authentification du docteur (email : [demo@gmail.com](mailto:demo@gmail.com) , password : demo123).
+## Changements proposés
 
-### Nouveau fichier : `src/pages/Admin.tsx`
+### Backend (`backend/app/services/ai_service.py`)
 
-**Contenu :**
+- **Étape `propose_slots**` : au lieu de proposer 3 créneaux du jour en texte, passer directement à l'étape `waiting_slot` et renvoyer une réponse contenant le marqueur `[SLOT_PICKER]` que le frontend détectera. Exemple de retour :
+  ```
+  "Choisissez la date et l'heure de votre rendez-vous. [SLOT_PICKER]"
+  ```
+  (texte naturel généré + marqueur appended)
+- **Étape `waiting_slot**` : avant le `int(message)` actuel, tenter de parser un JSON `{"date":"YYYY-MM-DD","time":"HH:MM"}`. Si présent :
+  - Vérifier la dispo via `is_slot_available(date, time)`
+  - Stocker dans `session["selected_slot"]`
+  - Passer en `waiting_confirmation` et renvoyer le résumé pour confirmation
+  - Garder le fallback numérique pour rétrocompatibilité
+- **Format de réponse** : optionnel — enrichir `ChatResponse` (`backend/app/models/schemas.py` + `routes/chat.py`) pour renvoyer aussi `action: "pick_slot"` en plus du texte. Plus propre que le marqueur, mais le marqueur suffit si on veut éviter de toucher au schéma.
 
-- En-tête : titre « Tableau de bord — Rendez-vous », sous-titre, lien retour vers l'accueil.
-- Barre de filtres (responsive, flex-wrap) :
-  - Select urgence : « Tous », « Urgent », « Non urgent »
-  - Date picker (shadcn `Calendar` + `Popover`) avec bouton « Réinitialiser »
-  - Compteur de résultats à droite
-- Tableau (composant shadcn `Table`) avec colonnes :
-  - Patient | Téléphone | Motif | Urgence | Date | Heure
-- Ligne « Urgent » : `Badge` rouge (variant `destructive`) ; sinon badge vert doux (`secondary`).
-- États gérés : loading (skeletons), erreur (message + bouton réessayer), liste vide (message).
-- Responsive : tableau scrollable horizontalement sur mobile (`overflow-x-auto`), filtres empilés en colonne < `md`.
+### Frontend (`src/components/Chatbot.tsx`)
 
-### Récupération des données
-
-```ts
-const API_URL = "http://localhost:8000/appointments";
-// fetch via useQuery (TanStack Query est déjà configuré dans App.tsx)
-```
-
-Format attendu (à confirmer côté backend, hypothèse raisonnable) :
-
-```json
-[
-  {
-    "id": "1",
-    "patient_name": "Jean Dupont",
-    "phone": "+213 555 12 34 56",
-    "motif": "Consultation générale",
-    "urgency": "urgent" | "non_urgent",
-    "date": "2026-04-30",
-    "time": "10:30"
+- **Payload** : envoyer `{ message, session_id }` (déjà le cas, OK avec `ChatRequest`).
+- **Importer `SlotPicker**` et étendre l'interface `Message` :
+  ```ts
+  interface Message {
+    id; role; content;
+    showSlotPicker?: boolean;
+    slotPickerUsed?: boolean;
   }
-]
+  ```
+- **Détection** : si `content.includes("[SLOT_PICKER]")` ou `data.action === "pick_slot"`, marquer le message avec `showSlotPicker: true` et nettoyer le marqueur du texte affiché.
+- **Rendu** : sous la bulle assistant concernée, monter `<SlotPicker onSelect={(date, time) => …} disabled={msg.slotPickerUsed} />`.
+- **Callback `onSelect**` : marquer le picker comme utilisé (verrouille les autres pickers passés), puis appeler `sendMessage` automatiquement avec `JSON.stringify({date, time})` comme contenu — afficher côté UI une bulle utilisateur lisible type "📅 27/04/2026 à 14:30".
+
+### Flux résultant
+
+```text
+user: "oui je confirme mes infos"
+bot:  "Voici les créneaux dispo : [SLOT_PICKER]"  ──► affiche calendrier + slots
+user: clique 27/04 → 14:30
+   ↳ POST /chat { message: '{"date":"2026-04-27","time":"14:30"}' }
+bot:  "Je confirme RDV le 27/04 à 14:30, c'est bien ça ?"
+user: "oui"
+bot:  "Rendez-vous confirmé ✅ un mail est envoyé à votre boite mail"
 ```
 
-Le composant sera tolérant aux variantes de noms de champs (ex. `name` / `patient_name`) via un petit normalizer.
+## Détails techniques
 
-### Filtrage
+- **CORS backend** : déjà configuré (`allow_origins=["*"]`), OK.
+- **Session** : `SESSION_ID` est régénéré à chaque montage du composant React ⚠️ — à terme, le persister dans `localStorage` pour ne pas perdre le contexte serveur entre rechargements (hors scope minimal mais recommandé).
+- **Marqueur vs `action**` : on commence par le marqueur `[SLOT_PICKER]` (zéro changement de schéma). Si vous préférez, on ajoute `action: Optional[str]` dans `ChatResponse` au passage.
+- **Robustesse parse JSON** : dans `waiting_slot`, `try: payload = json.loads(message); date, time = payload["date"], payload["time"]` avant le fallback `int(message)`.
+- **Pas de modification de `/availability**` ni de `db_service.is_slot_available`.
 
-- Filtres appliqués côté client sur la liste reçue (simple, pas de paramètres URL backend supposés).
-- Filtre urgence : comparaison sur le champ `urgency`.
-- Filtre date : comparaison sur la date `DD-MM-YYYY`.
+## Fichiers touchés
 
-### Navigation
-
-- Ajout d'un petit lien discret « Admin » dans `src/components/Footer.tsx` pour accéder à `/admin` (puisqu'on ne veut pas polluer la navbar publique).
-
-### Détails techniques
-
-- Composants shadcn utilisés : `Table`, `Badge`, `Button`, `Select`, `Popover`, `Calendar`, `Skeleton`, `Card`.
-- `date-fns` pour le formatage français (`format(date, "dd MMM yyyy", { locale: fr })`).
-- `Calendar` avec `className="p-3 pointer-events-auto"`.
-- Tous les textes en français.
-- Couleurs du design system existant (primary bleu, secondary vert, destructive rouge) — aucune couleur en dur.
-
-### Fichiers modifiés / créés
-
-- **Créé** : `src/pages/Admin.tsx`
-- **Modifié** : `src/App.tsx` (ajout route `/admin`)
-- **Modifié** : `src/components/Footer.tsx` (lien discret « Espace admin »)
-
-### Note CORS
-
-Le backend FastAPI sur `localhost:8000` doit autoriser les requêtes CORS depuis l'origine du frontend (`localhost:8080`). Si erreur CORS dans la console, il faudra ajouter `CORSMiddleware` côté backend Python.
+- `backend/app/services/ai_service.py` — branches `propose_slots` et `waiting_slot`
+- `src/components/Chatbot.tsx` — URL, parsing réponse, rendu SlotPicker, envoi JSON
+- (optionnel) `backend/app/models/schemas.py` + `backend/app/routes/chat.py` — ajouter `action`

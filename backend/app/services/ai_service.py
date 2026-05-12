@@ -155,17 +155,35 @@ def generate_response(message: str, session_id: str):
 
     if current_step == "waiting_slot":
 
+        selected = None
+
+        # 🔹 Tentative de parser un JSON {"date": "...", "time": "..."} envoyé par le SlotPicker
         try:
-            choice = int(message) - 1
+            payload = json.loads(message)
+            if isinstance(payload, dict) and payload.get("date") and payload.get("time"):
+                from app.services.db_service import is_slot_available
+                if is_slot_available(payload["date"], payload["time"]):
+                    selected = {"date": payload["date"], "time": payload["time"]}
+                else:
+                    return generate_natural_response(
+                        message,
+                        data,
+                        "créneau déjà pris, demander un autre choix [SLOT_PICKER]"
+                    ) + " [SLOT_PICKER]"
+        except Exception:
+            pass
 
-            selected = session["slots"][choice]
-
-        except:
-            return generate_natural_response(
-                message,
-                data,
-                "choix créneau invalide"
-            )
+        # 🔹 Fallback : index numérique (rétrocompatibilité)
+        if selected is None:
+            try:
+                choice = int(message.strip()) - 1
+                selected = session["slots"][choice]
+            except Exception:
+                return generate_natural_response(
+                    message,
+                    data,
+                    "choix créneau invalide [SLOT_PICKER]"
+                ) + " [SLOT_PICKER]"
 
         session["selected_slot"] = selected
 
@@ -393,35 +411,17 @@ demander validation
 
     if session["step"] == "propose_slots":
 
-        slots = get_available_slots()
-
-        if not slots:
-
-            return generate_natural_response(
-                message,
-                data,
-                "aucun créneau disponible"
-            )
-
-        session["slots"] = slots
+        session["slots"] = []
 
         session["step"] = "waiting_slot"
 
         intro = generate_natural_response(
             message,
             data,
-            "proposer créneaux disponibles"
+            "inviter l'utilisateur à choisir une date et un créneau dans le calendrier"
         )
 
-        msg = intro + "\n\n"
-
-        for i, s in enumerate(slots):
-
-            msg += f"{i+1}. {s['time']}\n"
-
-        msg += "\nChoisissez le numéro du créneau."
-
-        return msg
+        return intro + " [SLOT_PICKER]"
 
     # ---------------- FALLBACK ---------------- #
 
