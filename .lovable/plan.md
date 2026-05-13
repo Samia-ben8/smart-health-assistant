@@ -1,65 +1,94 @@
-# Connecter le SlotPicker au backend
+## Objectif
 
-## Problèmes identifiés
+Transformer la page `/admin` en un véritable tableau de bord médical avec statistiques visuelles, export CSV et gestion CRUD (annuler / supprimer un rendez-vous).
 
-1. **Le Chatbot ne rend plus le SlotPicker** — `src/components/Chatbot.tsx` actuel n'importe pas `SlotPicker` et n'a aucune logique pour l'afficher. Le composant existe mais est orphelin.
-2. **Le backend n'émet aucun signal pour déclencher le picker** — Dans `conversation_service.py` (en réalité `ai_service.py`), à l'étape `propose_slots`, le backend renvoie une liste numérotée en texte (`1. 09:00 …`) et attend un numéro à l'étape `waiting_slot`. Aucun champ `action: "pick_slot"` ni marqueur `[SLOT_PICKER]` n'est renvoyé.
-3. `**waiting_slot` n'accepte qu'un index numérique** — il ne sait pas parser un JSON `{"date":"…","time":"…"}` envoyé par le picker.
-4. `**/availability` fonctionne déjà** ✅ — pas de changement nécessaire côté endpoint, le SlotPicker l'appelle correctement.
+---
 
-## Changements proposés
+## 1. Backend — nouveaux endpoints
 
-### Backend (`backend/app/services/ai_service.py`)
+### `backend/app/routes/appointments.py`
 
-- **Étape `propose_slots**` : au lieu de proposer 3 créneaux du jour en texte, passer directement à l'étape `waiting_slot` et renvoyer une réponse contenant le marqueur `[SLOT_PICKER]` que le frontend détectera. Exemple de retour :
-  ```
-  "Choisissez la date et l'heure de votre rendez-vous. [SLOT_PICKER]"
-  ```
-  (texte naturel généré + marqueur appended)
-- **Étape `waiting_slot**` : avant le `int(message)` actuel, tenter de parser un JSON `{"date":"YYYY-MM-DD","time":"HH:MM"}`. Si présent :
-  - Vérifier la dispo via `is_slot_available(date, time)`
-  - Stocker dans `session["selected_slot"]`
-  - Passer en `waiting_confirmation` et renvoyer le résumé pour confirmation
-  - Garder le fallback numérique pour rétrocompatibilité
-- **Format de réponse** : optionnel — enrichir `ChatResponse` (`backend/app/models/schemas.py` + `routes/chat.py`) pour renvoyer aussi `action: "pick_slot"` en plus du texte. Plus propre que le marqueur, mais le marqueur suffit si on veut éviter de toucher au schéma.
-
-### Frontend (`src/components/Chatbot.tsx`)
-
-- **Payload** : envoyer `{ message, session_id }` (déjà le cas, OK avec `ChatRequest`).
-- **Importer `SlotPicker**` et étendre l'interface `Message` :
-  ```ts
-  interface Message {
-    id; role; content;
-    showSlotPicker?: boolean;
-    slotPickerUsed?: boolean;
-  }
-  ```
-- **Détection** : si `content.includes("[SLOT_PICKER]")` ou `data.action === "pick_slot"`, marquer le message avec `showSlotPicker: true` et nettoyer le marqueur du texte affiché.
-- **Rendu** : sous la bulle assistant concernée, monter `<SlotPicker onSelect={(date, time) => …} disabled={msg.slotPickerUsed} />`.
-- **Callback `onSelect**` : marquer le picker comme utilisé (verrouille les autres pickers passés), puis appeler `sendMessage` automatiquement avec `JSON.stringify({date, time})` comme contenu — afficher côté UI une bulle utilisateur lisible type "📅 27/04/2026 à 14:30".
-
-### Flux résultant
-
-```text
-user: "oui je confirme mes infos"
-bot:  "Voici les créneaux dispo : [SLOT_PICKER]"  ──► affiche calendrier + slots
-user: clique 27/04 → 14:30
-   ↳ POST /chat { message: '{"date":"2026-04-27","time":"14:30"}' }
-bot:  "Je confirme RDV le 27/04 à 14:30, c'est bien ça ?"
-user: "oui"
-bot:  "Rendez-vous confirmé ✅ un mail est envoyé à votre boite mail"
+Ajouter l'`id` du RDV dans la réponse de `GET /appointments` (actuellement absent — bloque toute action ciblée) :
+```python
+"id": str(appt["_id"]),
 ```
 
-## Détails techniques
+Ajouter deux nouveaux endpoints :
 
-- **CORS backend** : déjà configuré (`allow_origins=["*"]`), OK.
-- **Session** : `SESSION_ID` est régénéré à chaque montage du composant React ⚠️ — à terme, le persister dans `localStorage` pour ne pas perdre le contexte serveur entre rechargements (hors scope minimal mais recommandé).
-- **Marqueur vs `action**` : on commence par le marqueur `[SLOT_PICKER]` (zéro changement de schéma). Si vous préférez, on ajoute `action: Optional[str]` dans `ChatResponse` au passage.
-- **Robustesse parse JSON** : dans `waiting_slot`, `try: payload = json.loads(message); date, time = payload["date"], payload["time"]` avant le fallback `int(message)`.
-- **Pas de modification de `/availability**` ni de `db_service.is_slot_available`.
+- **`DELETE /appointments/{appointment_id}`** → supprime un RDV (annulation définitive). Retourne `{ "deleted": true }`.
+- **`GET /appointments/stats`** → renvoie un objet d'agrégats pour les graphiques :
+  ```json
+  {
+    "total": 42,
+    "urgent": 8,
+    "non_urgent": 34,
+    "today": 5,
+    "this_week": 18,
+    "by_day": [{ "date": "2026-05-12", "count": 3 }, ...],   // 14 derniers jours
+    "by_motif": [{ "motif": "consultation", "count": 12 }, ...] // top 5
+  }
+  ```
 
-## Fichiers touchés
+Logique d'agrégation faite directement en Python à partir de `appointments_collection.find()` (volume faible, pas besoin de pipeline Mongo complexe).
 
-- `backend/app/services/ai_service.py` — branches `propose_slots` et `waiting_slot`
-- `src/components/Chatbot.tsx` — URL, parsing réponse, rendu SlotPicker, envoi JSON
-- (optionnel) `backend/app/models/schemas.py` + `backend/app/routes/chat.py` — ajouter `action`
+---
+
+## 2. Frontend — `src/pages/Admin.tsx`
+
+### a) Bandeau de statistiques (en haut, sous le header)
+
+4 cartes synthétiques côte à côte :
+- **Total RDV** (icône Calendar)
+- **Aujourd'hui** (icône Clock)
+- **Cette semaine** (icône CalendarDays)
+- **Urgents** (icône AlertCircle, accent rouge)
+
+### b) Section Graphiques (sous le bandeau)
+
+Deux graphiques avec `recharts` (déjà installé via shadcn/ui) :
+- **Bar chart** : RDV par jour sur 14 jours
+- **Pie chart** : Urgent vs Non urgent
+
+Layout responsive `grid md:grid-cols-2 gap-4`.
+
+### c) Action "Annuler" sur chaque ligne du tableau
+
+Ajouter une colonne **Actions** avec un bouton icône `Trash2` (variant ghost, rouge). Au clic :
+- Ouvre un `AlertDialog` shadcn de confirmation ("Annuler ce rendez-vous ?")
+- Si confirmé → `DELETE /appointments/{id}` puis toast succès + `refetch()` (React Query)
+
+### d) Bouton "Exporter CSV"
+
+Dans la barre de filtres, à côté de "Actualiser" :
+- Bouton `Download` qui exporte les RDV **filtrés** (respecte les filtres actifs)
+- Génération CSV côté client (pas besoin d'endpoint), nom du fichier : `rendez-vous-YYYY-MM-DD.csv`
+- Colonnes : Patient, Téléphone, Motif, Urgence, Date, Heure
+
+---
+
+## 3. Détails techniques
+
+- **React Query** : nouvelle query `["appointments-stats"]` pour les stats, mutation `useMutation` pour le DELETE avec invalidation auto des caches `appointments` et `appointments-stats`.
+- **Recharts** : utiliser les composants `<ChartContainer>` de `src/components/ui/chart.tsx` pour rester dans le design system (couleurs `--primary`, `--secondary`, `--destructive`).
+- **CSV** : helper local `exportToCsv(rows, filename)` — `Blob` + `URL.createObjectURL` + lien téléchargement.
+- **Normalize** : étendre le `normalize()` existant pour inclure `id` retourné par le backend.
+- **Aucun changement** sur le chatbot, `SlotPicker`, ou le flux de réservation.
+
+---
+
+## 4. Fichiers touchés
+
+**Backend**
+- `backend/app/routes/appointments.py` — ajout `id` + endpoints `DELETE` et `/stats`
+
+**Frontend**
+- `src/pages/Admin.tsx` — bandeau stats, graphiques, bouton annuler, export CSV
+- (éventuel) `src/components/admin/StatsCards.tsx` + `StatsCharts.tsx` pour garder `Admin.tsx` lisible
+
+---
+
+## 5. Hors scope (suggestions futures)
+
+- Édition d'un RDV (reprogrammer date/heure)
+- Filtre par motif / recherche par nom patient
+- Pagination si > 50 RDV
