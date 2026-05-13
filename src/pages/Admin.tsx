@@ -194,10 +194,28 @@ const Admin = () => {
   const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
 
+  const queryClient = useQueryClient();
+
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["appointments"],
     queryFn: fetchAppointments,
     enabled: authed,
+  });
+
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ["appointments-stats"],
+    queryFn: fetchStats,
+    enabled: authed,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteAppointment,
+    onSuccess: () => {
+      toast.success("Rendez-vous annulé");
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-stats"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Échec de la suppression"),
   });
 
   const filtered = useMemo(() => {
@@ -207,7 +225,6 @@ const Admin = () => {
       if (urgencyFilter === "non_urgent" && isUrgent(a.urgency)) return false;
       if (dateFilter) {
         const target = format(dateFilter, "yyyy-MM-dd");
-        // Try parsing the appointment date in common formats
         const apptDate = a.date?.slice(0, 10);
         if (apptDate !== target) return false;
       }
@@ -218,6 +235,23 @@ const Admin = () => {
   const handleLogout = () => {
     sessionStorage.removeItem(AUTH_KEY);
     setAuthed(false);
+  };
+
+  const handleExport = () => {
+    if (filtered.length === 0) {
+      toast.info("Aucun rendez-vous à exporter");
+      return;
+    }
+    const rows = filtered.map((a) => ({
+      Patient: a.patient_name,
+      Téléphone: a.phone,
+      Motif: a.motif,
+      Urgence: isUrgent(a.urgency) ? "Urgent" : "Non urgent",
+      Date: a.date,
+      Heure: a.time,
+    }));
+    exportToCsv(rows, `rendez-vous-${format(new Date(), "yyyy-MM-dd")}.csv`);
+    toast.success(`${rows.length} rendez-vous exporté${rows.length > 1 ? "s" : ""}`);
   };
 
   if (!authed) return <LoginScreen onSuccess={() => setAuthed(true)} />;
