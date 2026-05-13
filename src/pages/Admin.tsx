@@ -1,9 +1,32 @@
 import { useState, useMemo, FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { CalendarIcon, ArrowLeft, RefreshCw, AlertCircle, LogOut, Lock } from "lucide-react";
+import {
+  CalendarIcon,
+  ArrowLeft,
+  RefreshCw,
+  AlertCircle,
+  LogOut,
+  Lock,
+  Trash2,
+  Download,
+} from "lucide-react";
+import StatsCards, { type Stats } from "@/components/admin/StatsCards";
+import StatsCharts from "@/components/admin/StatsCharts";
+import { exportToCsv } from "@/lib/csv";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,7 +54,8 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 
-const API_URL = "http://localhost:8000/appointments";
+const API_BASE = "http://localhost:8000";
+const API_URL = `${API_BASE}/appointments`;
 const AUTH_KEY = "admin_authenticated";
 const DEMO_EMAIL = "demo@gmail.com";
 const DEMO_PASSWORD = "demo123";
@@ -74,6 +98,18 @@ const fetchAppointments = async (): Promise<Appointment[]> => {
   const data = await res.json();
   const list = Array.isArray(data) ? data : data.appointments ?? [];
   return list.map(normalize);
+};
+
+const fetchStats = async (): Promise<Stats> => {
+  const res = await fetch(`${API_BASE}/appointments/stats`);
+  if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  return res.json();
+};
+
+const deleteAppointment = async (id: string | number) => {
+  const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  return res.json();
 };
 
 const LoginScreen = ({ onSuccess }: { onSuccess: () => void }) => {
