@@ -1,9 +1,32 @@
 import { useState, useMemo, FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { CalendarIcon, ArrowLeft, RefreshCw, AlertCircle, LogOut, Lock } from "lucide-react";
+import {
+  CalendarIcon,
+  ArrowLeft,
+  RefreshCw,
+  AlertCircle,
+  LogOut,
+  Lock,
+  Trash2,
+  Download,
+} from "lucide-react";
+import StatsCards, { type Stats } from "@/components/admin/StatsCards";
+import StatsCharts from "@/components/admin/StatsCharts";
+import { exportToCsv } from "@/lib/csv";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,7 +54,8 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 
-const API_URL = "http://localhost:8000/appointments";
+const API_BASE = "http://localhost:8000";
+const API_URL = `${API_BASE}/appointments`;
 const AUTH_KEY = "admin_authenticated";
 const DEMO_EMAIL = "demo@gmail.com";
 const DEMO_PASSWORD = "demo123";
@@ -74,6 +98,18 @@ const fetchAppointments = async (): Promise<Appointment[]> => {
   const data = await res.json();
   const list = Array.isArray(data) ? data : data.appointments ?? [];
   return list.map(normalize);
+};
+
+const fetchStats = async (): Promise<Stats> => {
+  const res = await fetch(`${API_BASE}/appointments/stats`);
+  if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  return res.json();
+};
+
+const deleteAppointment = async (id: string | number) => {
+  const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  return res.json();
 };
 
 const LoginScreen = ({ onSuccess }: { onSuccess: () => void }) => {
@@ -158,10 +194,28 @@ const Admin = () => {
   const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
 
+  const queryClient = useQueryClient();
+
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["appointments"],
     queryFn: fetchAppointments,
     enabled: authed,
+  });
+
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ["appointments-stats"],
+    queryFn: fetchStats,
+    enabled: authed,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteAppointment,
+    onSuccess: () => {
+      toast.success("Rendez-vous annulé");
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-stats"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Échec de la suppression"),
   });
 
   const filtered = useMemo(() => {
@@ -171,7 +225,6 @@ const Admin = () => {
       if (urgencyFilter === "non_urgent" && isUrgent(a.urgency)) return false;
       if (dateFilter) {
         const target = format(dateFilter, "yyyy-MM-dd");
-        // Try parsing the appointment date in common formats
         const apptDate = a.date?.slice(0, 10);
         if (apptDate !== target) return false;
       }
@@ -182,6 +235,23 @@ const Admin = () => {
   const handleLogout = () => {
     sessionStorage.removeItem(AUTH_KEY);
     setAuthed(false);
+  };
+
+  const handleExport = () => {
+    if (filtered.length === 0) {
+      toast.info("Aucun rendez-vous à exporter");
+      return;
+    }
+    const rows = filtered.map((a) => ({
+      Patient: a.patient_name,
+      Téléphone: a.phone,
+      Motif: a.motif,
+      Urgence: isUrgent(a.urgency) ? "Urgent" : "Non urgent",
+      Date: a.date,
+      Heure: a.time,
+    }));
+    exportToCsv(rows, `rendez-vous-${format(new Date(), "yyyy-MM-dd")}.csv`);
+    toast.success(`${rows.length} rendez-vous exporté${rows.length > 1 ? "s" : ""}`);
   };
 
   if (!authed) return <LoginScreen onSuccess={() => setAuthed(true)} />;
@@ -215,6 +285,9 @@ const Admin = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        <StatsCards stats={stats} loading={statsLoading} />
+        <StatsCharts stats={stats} loading={statsLoading} />
+
         {/* Filters */}
         <Card className="p-4 mb-6 shadow-card">
           <div className="flex flex-col md:flex-row md:items-end gap-4 flex-wrap">
@@ -282,6 +355,15 @@ const Admin = () => {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={handleExport}
+                disabled={filtered.length === 0}
+              >
+                <Download size={14} />
+                Exporter CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => refetch()}
                 disabled={isFetching}
               >
@@ -307,13 +389,14 @@ const Admin = () => {
                   <TableHead>Urgence</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Heure</TableHead>
+                  <TableHead className="w-[60px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading &&
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <TableCell key={j}>
                           <Skeleton className="h-4 w-full" />
                         </TableCell>
@@ -323,7 +406,7 @@ const Admin = () => {
 
                 {isError && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center">
+                    <TableCell colSpan={7} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <AlertCircle className="text-destructive" size={32} />
                         <div>
@@ -346,7 +429,7 @@ const Admin = () => {
 
                 {!isLoading && !isError && filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
                       Aucun rendez-vous trouvé
                     </TableCell>
                   </TableRow>
@@ -368,15 +451,9 @@ const Admin = () => {
                     }
                     return (
                       <TableRow key={a.id}>
-                        <TableCell className="font-medium">
-                          {a.patient_name}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {a.phone}
-                        </TableCell>
-                        <TableCell className="max-w-[260px] truncate">
-                          {a.motif}
-                        </TableCell>
+                        <TableCell className="font-medium">{a.patient_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{a.phone}</TableCell>
+                        <TableCell className="max-w-[260px] truncate">{a.motif}</TableCell>
                         <TableCell>
                           {urgent ? (
                             <Badge variant="destructive">Urgent</Badge>
@@ -391,6 +468,39 @@ const Admin = () => {
                         </TableCell>
                         <TableCell>{displayDate}</TableCell>
                         <TableCell>{a.time}</TableCell>
+                        <TableCell className="text-right">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                disabled={deleteMutation.isPending}
+                                aria-label="Annuler le rendez-vous"
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Annuler ce rendez-vous ?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Le rendez-vous de <strong>{a.patient_name}</strong> du{" "}
+                                  {displayDate} à {a.time} sera supprimé définitivement.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Retour</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => deleteMutation.mutate(a.id)}
+                                >
+                                  Confirmer l'annulation
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
