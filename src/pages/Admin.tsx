@@ -285,6 +285,9 @@ const Admin = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        <StatsCards stats={stats} loading={statsLoading} />
+        <StatsCharts stats={stats} loading={statsLoading} />
+
         {/* Filters */}
         <Card className="p-4 mb-6 shadow-card">
           <div className="flex flex-col md:flex-row md:items-end gap-4 flex-wrap">
@@ -349,6 +352,15 @@ const Admin = () => {
               <span className="text-sm text-muted-foreground">
                 {filtered.length} résultat{filtered.length > 1 ? "s" : ""}
               </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={filtered.length === 0}
+              >
+                <Download size={14} />
+                Exporter CSV
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
