@@ -389,13 +389,14 @@ const Admin = () => {
                   <TableHead>Urgence</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Heure</TableHead>
+                  <TableHead className="w-[60px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading &&
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <TableCell key={j}>
                           <Skeleton className="h-4 w-full" />
                         </TableCell>
@@ -405,7 +406,7 @@ const Admin = () => {
 
                 {isError && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center">
+                    <TableCell colSpan={7} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <AlertCircle className="text-destructive" size={32} />
                         <div>
@@ -428,7 +429,7 @@ const Admin = () => {
 
                 {!isLoading && !isError && filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
                       Aucun rendez-vous trouvé
                     </TableCell>
                   </TableRow>
@@ -450,15 +451,9 @@ const Admin = () => {
                     }
                     return (
                       <TableRow key={a.id}>
-                        <TableCell className="font-medium">
-                          {a.patient_name}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {a.phone}
-                        </TableCell>
-                        <TableCell className="max-w-[260px] truncate">
-                          {a.motif}
-                        </TableCell>
+                        <TableCell className="font-medium">{a.patient_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{a.phone}</TableCell>
+                        <TableCell className="max-w-[260px] truncate">{a.motif}</TableCell>
                         <TableCell>
                           {urgent ? (
                             <Badge variant="destructive">Urgent</Badge>
@@ -473,6 +468,39 @@ const Admin = () => {
                         </TableCell>
                         <TableCell>{displayDate}</TableCell>
                         <TableCell>{a.time}</TableCell>
+                        <TableCell className="text-right">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                disabled={deleteMutation.isPending}
+                                aria-label="Annuler le rendez-vous"
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Annuler ce rendez-vous ?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Le rendez-vous de <strong>{a.patient_name}</strong> du{" "}
+                                  {displayDate} à {a.time} sera supprimé définitivement.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Retour</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => deleteMutation.mutate(a.id)}
+                                >
+                                  Confirmer l'annulation
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
