@@ -39,7 +39,7 @@ const Chatbot = ({ isOpen, onToggle }: ChatbotProps) => {
       id: "welcome",
       role: "assistant",
       content:
-        "Bonjour 👋 Je suis l'assistant du Cabinet Médical Intelligent.\n\nJe peux vous aider à :\n• Prendre un rendez-vous\n• Modifier un rendez-vous\n• Répondre à vos questions\n\nQuel est votre nom et prénom ?",
+        "Bonjour 👋 Je suis l'assistant du Cabinet Médical Intelligent.\n\nSouhaitez-vous :\n• Créer un nouveau rendez-vous\n• Modifier un rendez-vous existant ?",
     },
   ]);
 
