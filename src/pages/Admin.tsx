@@ -291,6 +291,49 @@ const Admin = () => {
         <StatsCards stats={stats} loading={statsLoading} />
         <StatsCharts stats={stats} loading={statsLoading} />
 
+        {/* View toggle */}
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <Tabs value={view} onValueChange={(v) => setView(v as "calendar" | "table")}>
+            <TabsList>
+              <TabsTrigger value="calendar">
+                <CalendarIcon size={14} className="mr-1.5" />
+                Calendrier
+              </TabsTrigger>
+              <TabsTrigger value="table">Tous les RDV</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={(view === "table" ? filtered.length : data?.length ?? 0) === 0}
+            >
+              <Download size={14} />
+              Exporter CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw size={14} className={cn(isFetching && "animate-spin")} />
+              Actualiser
+            </Button>
+          </div>
+        </div>
+
+        {view === "calendar" && (
+          <AppointmentsCalendar
+            appointments={data ?? []}
+            onDelete={(id) => deleteMutation.mutate(id)}
+            isDeleting={deleteMutation.isPending}
+          />
+        )}
+
+        {view === "table" && (
+          <>
         {/* Filters */}
         <Card className="p-4 mb-6 shadow-card">
           <div className="flex flex-col md:flex-row md:items-end gap-4 flex-wrap">
