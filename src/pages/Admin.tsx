@@ -398,27 +398,6 @@ const Admin = () => {
               <span className="text-sm text-muted-foreground">
                 {filtered.length} résultat{filtered.length > 1 ? "s" : ""}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExport}
-                disabled={filtered.length === 0}
-              >
-                <Download size={14} />
-                Exporter CSV
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refetch()}
-                disabled={isFetching}
-              >
-                <RefreshCw
-                  size={14}
-                  className={cn(isFetching && "animate-spin")}
-                />
-                Actualiser
-              </Button>
             </div>
           </div>
         </Card>
