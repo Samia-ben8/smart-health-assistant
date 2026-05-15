@@ -183,10 +183,19 @@ const AppointmentsCalendar = ({ appointments, onDelete, isDeleting }: Props) => 
           <ul className="space-y-2">
             {dayAppointments.map((a) => {
               const urgent = isUrgent(a.urgency);
+              const apptDate = safeParse(a.date);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const isDone = apptDate
+                ? new Date(apptDate.getFullYear(), apptDate.getMonth(), apptDate.getDate()) < today
+                : false;
               return (
                 <li
                   key={a.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors"
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors",
+                    isDone && "opacity-70"
+                  )}
                 >
                   <div className="text-sm font-mono font-semibold text-primary min-w-[55px]">
                     {a.time || "--:--"}
@@ -199,7 +208,11 @@ const AppointmentsCalendar = ({ appointments, onDelete, isDeleting }: Props) => 
                       {a.motif} · {a.phone}
                     </div>
                   </div>
-                  {urgent ? (
+                  {isDone ? (
+                    <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
+                      Done
+                    </Badge>
+                  ) : urgent ? (
                     <Badge variant="destructive">Urgent</Badge>
                   ) : (
                     <Badge
