@@ -533,6 +533,8 @@ const Admin = () => {
             </Table>
           </div>
         </Card>
+          </>
+        )}
       </main>
     </div>
   );
