@@ -465,22 +465,30 @@ const Admin = () => {
                   filtered.map((a) => {
                     const urgent = isUrgent(a.urgency);
                     let displayDate = a.date;
+                    let isDone = false;
                     try {
                       if (a.date) {
-                        displayDate = format(new Date(a.date), "dd MMM yyyy", {
-                          locale: fr,
-                        });
+                        const d = new Date(a.date);
+                        displayDate = format(d, "dd MMM yyyy", { locale: fr });
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                        isDone = dDay < today;
                       }
                     } catch {
                       /* keep raw */
                     }
                     return (
-                      <TableRow key={a.id}>
+                      <TableRow key={a.id} className={cn(isDone && "opacity-70")}>
                         <TableCell className="font-medium">{a.patient_name}</TableCell>
                         <TableCell className="text-muted-foreground">{a.phone}</TableCell>
                         <TableCell className="max-w-[260px] truncate">{a.motif}</TableCell>
                         <TableCell>
-                          {urgent ? (
+                          {isDone ? (
+                            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
+                              Done
+                            </Badge>
+                          ) : urgent ? (
                             <Badge variant="destructive">Urgent</Badge>
                           ) : (
                             <Badge
