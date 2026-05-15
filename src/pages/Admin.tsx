@@ -195,6 +195,7 @@ const Admin = () => {
   );
   const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
+  const [view, setView] = useState<"calendar" | "table">("calendar");
 
   const queryClient = useQueryClient();
 
