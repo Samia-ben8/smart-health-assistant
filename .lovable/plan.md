@@ -1,137 +1,73 @@
-# Plan — Corriger le voicebot (créneaux + email épelé)
-
-## Problème
-
-Le voicebot partage actuellement la même logique que le chatbot (`generate_response` dans `ai_service.py`). Deux étapes ne fonctionnent pas au téléphone :
-
-1. **Choix du créneau** — le backend renvoie `[SLOT_PICKER]` qui suppose une UI calendrier. Au téléphone, il n'y a pas d'UI → l'utilisateur ne peut rien choisir → boucle infinie.
-2. **Email** — collecté en une fois via reconnaissance vocale, donc presque toujours mal transcrit (ex. "yassine arobase gmail point com" devient n'importe quoi). Pas de vérification.
-
 ## Objectif
 
-Garder le chatbot inchangé. Ajouter un **mode `voice**` dans le backend qui :
+Remplacer le tableau actuel des rendez-vous par une **vue calendrier mensuelle** (style Google Agenda — vue "Mois") par défaut, avec :
+- mise en évidence du jour courant
+- aperçu des RDV directement dans chaque case du mois (badges/points)
+- clic sur un jour → panneau latéral / section dessous listant les RDV de ce jour
+- un bouton **"Tous les RDV"** en haut qui bascule vers le tableau actuel (conservé tel quel)
 
-- demande a l utilisateur quel slot qui lui convient le plus , si ce slot est valide donc on accepte , sinon on demande a l utilisateur de choisir un autre slot ,  
-ex : *voicebot -> quel sera la date et l heure de votre reservation ? *  
-*user -> je souhaite reserver le 19-05-2026 vers 13h .*  
-*voicebot -> votre rendez vous est bien enregistré vers mardi prochain a 13h*   
-ou  
-*voicebot -> quel sera la date et l heure de votre reservation ? *  
-*user -> je souhaite reserver le 18 mai vers 13h .*  
-*voicebot -> je m excuse , ce creneaux est indiponible car il est deja reservé par un autre patient , veuillez choisir un autre creneau .*   
-ou  
-*voicebot -> quel sera la date et l heure de votre reservation ? *  
-*user -> je souhaite reserver le 18 mai vers 19h .*  
-*voicebot -> je m excuse , les heures de travail sont de 9h a 17h , veuillez choisir un crenenau entre ces heures*   
-ou  
-*voicebot -> quel sera la date et l heure de votre reservation ? *  
-*user -> je souhaite reserver le 1 avril vers 15h .*  
-*voicebot -> je m excuse , cette date est invalide , choisissez une date a partir de {this_date +1}*  
-   
- 
-- collecte l'email **par épellation lettre par lettre**, puis **fait répéter pour confirmation**.
-- corriger ces fautes de conversation   
-Bonjour 👋 Je suis l'assistant du Cabinet Médical Intelligent.  
-  
-Je peux vous aider à :  
-• Prendre un rendez-vous  
-• Modifier un rendez-vous  
-• Répondre à vos questions  
-  
-Quel est votre nom et prénom ?
-  je voudrais creer un nouveau rendez vous
-  Pour commencer, pourriez-vous me donner votre nom, s’il vous plaît ?
-  yassine el hodiguy
-  Pourriez-vous me communiquer votre numéro de téléphone, s’il vous plaît ?
-  0688503615
-  Pouvez-vous me communiquer votre adresse email, s’il vous plaît ?
-  [elhodiguyyassine@gmail.com](mailto:elhodiguyyassine@gmail.com)
-  Voici les informations que j’ai notées : Yassine El Hodiguy, téléphone 06 88 50 36 15, email [elhodiguyyassine@gmail.com](mailto:elhodiguyyassine@gmail.com), pour créer un nouveau rendez-vous, sans urgence. Est-ce exact ?
-  non , le motif c est mal au jambe
-  D'accord, j'ai mis à jour votre motif avec "mal au jambe".
-  ok
-  Merci, yassine el hodiguy, voici les informations que vous avez fournies : nom, téléphone, email, motif et urgence ; pouvez-vous confirmer que c'est bien cela ?
-  les info sont vide
-  Je vais corriger vos informations.
-  nom yassine num de tel 0688503615 email [elhodiguyyassine@gmail.com](mailto:elhodiguyyassine@gmail.com)
-  Merci, j’ai bien noté vos informations : Yassine, téléphone 0688503615, email [elhodiguyyassine@gmail.com](mailto:elhodiguyyassine@gmail.com). Confirmez-vous ?
-  oui
-  Pouvez-vous choisir une date et un créneau qui vous conviennent dans le calendrier ?
-  jeudi 14 mai 2026
-  **Créneaux disponibles**
-  **09:0009:3010:0010:3011:0011:3012:0012:3013:0013:3014:0014:3015:0015:3016:0016:3017:0017:30**
-  📅 jeudi 14 mai 2026 à 13:30
-  Votre rendez-vous est prévu pour le 14 mai 2026 à 13h30.
-  ok
-  Votre rendez-vous pour le 14 mai 2026 à 13h30 est bien confirmé.
-  merci  
-    
-  de facon a ce que l utilisateur doit choisir aux debut si  c est une nouvelle reservation ou bien la modification d une rerservation deja existante , si c est une nouvelle reservation on collecte les info sans sauter aucune : nom complet , num de tel , email , motif , urgence !   
-  si c est la modification d une reservation deja existante , on demande juste le num de tel associé a la reservation puis on fait fetch cette reservation dans notre /appoitement et puis on donne la main a l utilisateur de mlodifier son crenenaux   
-    
-  et juste enfin de la conversation avec le chatbot , apres cette phrase de confirmation "Votre rendez-vous pour le 14 mai 2026 à 13h30 est bien confirmé." , je voudrais ajouter cette phrase "un email de confirmation est envoyé a votre boite mail associé" pour dire a l utilisateur qu il pourra consulter les info de son rdv dans sa boite mail 
+Les filtres (urgence, export CSV, actualiser) et les stats restent. Les fonctionnalités existantes (suppression, badges urgence, auth, etc.) sont préservées.
 
-## Changements
+## Maquette
 
-### 1. Route `/chat` — accepter un canal
+```text
+┌─────────────────────────────────────────────────────────┐
+│ [Stats cards]  [Stats charts]                           │
+├─────────────────────────────────────────────────────────┤
+│ Vue : ( ◉ Calendrier  ○ Tous les RDV )   [Exporter] [↻]│
+├─────────────────────────────────────────────────────────┤
+│  ◀  Mai 2026  ▶                          [Aujourd'hui] │
+│  ┌───┬───┬───┬───┬───┬───┬───┐                         │
+│  │L  │M  │M  │J  │V  │S  │D  │                         │
+│  ├───┼───┼───┼───┼───┼───┼───┤                         │
+│  │ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │                         │
+│  │•• │   │ • │   │•••│   │   │  ← points = nb de RDV   │
+│  ├───┼───┼───┼───┼───┼───┼───┤                         │
+│  │...│TODAY│...                                        │
+│  └───┴───┴───┴───┴───┴───┴───┘                         │
+├─────────────────────────────────────────────────────────┤
+│ RDV du 15 mai 2026 (3)                                  │
+│  • 09:00 — Marie D. — Consultation [Urgent]      [🗑]  │
+│  • 10:30 — Paul K.  — Suivi                       [🗑] │
+│  • 14:00 — ...                                          │
+└─────────────────────────────────────────────────────────┘
+```
 
-`backend/app/routes/chat.py` et `backend/app/models/schemas.py` :
+## Étapes
 
-- Ajouter un champ optionnel `channel: "chat" | "voice"` dans `ChatRequest` (défaut `"chat"`).
-- Transmettre à `generate_response(message, session_id, channel)`.
+### 1. Nouveau composant `src/components/admin/AppointmentsCalendar.tsx`
+- Reçoit en props : `appointments: Appointment[]`, `onDelete(id)`, `isDeleting`.
+- Affiche un calendrier mensuel via le composant `Calendar` shadcn (`react-day-picker`) en `mode="single"`, `locale={fr}`, `showOutsideDays`.
+- Construit une `Map<YYYY-MM-DD, Appointment[]>` à partir des RDV.
+- Personnalise le rendu d'une cellule jour avec `components={{ DayContent }}` pour afficher :
+  - le numéro du jour
+  - de petits points colorés (rouge pour urgent, vert sinon), max 3, sinon `+N`
+- Sélection du jour par défaut = aujourd'hui ; bouton "Aujourd'hui" qui réinitialise.
+- Sous le calendrier : section listant les RDV du jour sélectionné triés par heure, avec heure, patient, motif, badge urgence, et bouton supprimer (réutilise `AlertDialog` comme dans le tableau actuel).
+- État vide : "Aucun rendez-vous ce jour".
 
-n8n (Workflow 2) ajoutera `"channel": "voice"` dans le body envoyé à FastAPI. Aucun changement TwiML structurel — on continue d'utiliser `<Gather input="speech">` avec la réponse texte du backend.
-
-### 2. `ai_service.py` — branchement par canal
-
-Stocker `channel` dans la session. Adapter deux étapes uniquement :
-
-**A. Étape `propose_slots` / `waiting_slot` en mode voice**
-
-- Au lieu d'envoyer `[SLOT_PICKER]`, appeler `get_available_slots(limit=3)` et stocker la liste dans `session["slots"]`.
-- Réponse parlée : *"Voici les créneaux disponibles : 1, aujourd'hui à 9h00. 2, aujourd'hui à 9h30. 3, aujourd'hui à 10h00. Dites le numéro souhaité."*
-- En `waiting_slot`, parser un **chiffre prononcé** (1/2/3, "un"/"deux"/"trois", "le premier"…) via une petite fonction `parse_spoken_choice(message)` → index → `session["slots"][i]`.
-- Si invalide : reformuler la liste.
-
-**B. Étapes email en mode voice — nouveau sous-flux**
-
-Ajouter deux étapes dédiées :
-
-- `waiting_email_spell` : prompt *"Veuillez épeler votre adresse email lettre par lettre, dites 'arobase' pour @ et 'point' pour le point."*
-- `waiting_email_confirm` : reconstruire l'email à partir de la transcription, le **relire caractère par caractère** *"j'ai compris : y, a, s, s, i, n, e, arobase, g, m, a, i, l, point, c, o, m. Est-ce correct ?"*
-  - `confirm` → enregistrer `data["email"]`, continuer le flow normal.
-  - `deny`/`modify` → retour à `waiting_email_spell`.
-
-Helper `spelled_to_email(transcript)` :
-
-- Normaliser la transcription : minuscules, mapper mots-clés français (`arobase`/`at` → `@`, `point`/`tiret`/`underscore`/`trait d'union` → `.`/`-`/`_`), retirer les espaces et la ponctuation, garder a-z 0-9 . _ - @.
-- Validation finale via `is_valid_email`.
-
-En mode `chat`, le comportement email reste identique (extraction IA en une fois).
+### 2. Modifier `src/pages/Admin.tsx`
+- Ajouter un state `view: "calendar" | "table"`, valeur par défaut `"calendar"`.
+- Remplacer la `Card` Filters actuelle par une barre simple :
+  - **Toggle** (`Tabs` shadcn ou deux `Button` toggle) : "Calendrier" | "Tous les RDV"
+  - À droite : boutons "Exporter CSV" et "Actualiser" (toujours visibles)
+- Si `view === "calendar"` → afficher `<AppointmentsCalendar … />` (les filtres urgence/date du tableau ne s'appliquent pas ici, le calendrier gère sa propre sélection).
+- Si `view === "table"` → afficher la `Card` de filtres (urgence + date) + le tableau actuel **inchangé**.
+- L'export CSV exporte selon la vue active : tous les RDV en mode calendrier, ou les `filtered` en mode tableau.
+- Conserver `deleteMutation` et le passer au calendrier.
 
 ### 3. Détails techniques
-
-- `parse_spoken_choice` : regex sur chiffres + dictionnaire `{"un":1, "premier":1, "deux":2, "deuxième":2, "trois":3, ...}`.
-- Mode voice ne renvoie **jamais** `[SLOT_PICKER]` (le frontend voice n'en a pas besoin, et n8n ne saurait pas l'interpréter).
-- `generate_natural_response` est conservé tel quel ; on lui passe juste des `next_action` plus explicites pour l'épellation.
-- Les nouvelles étapes (`waiting_email_spell`, `waiting_email_confirm`) sont ajoutées à la liste qui exclut l'extraction IA automatique du message courant.
-
-### 4. Hors scope
-
-- Pas de modification du frontend chatbot ni de `SlotPicker`.
-- Pas de modification des workflows n8n (sauf l'ajout de `"channel": "voice"` dans le body — à faire côté n8n par l'utilisateur, je documenterai).
-- Pas de changement Twilio/TwiML.
+- Réutiliser `date-fns` (déjà présent) : `format`, `parseISO`, `isSameDay`, `startOfDay`.
+- Agrandir un peu le `Calendar` (`className="p-4"` + cellules plus grandes) : surcharger `classNames.cell` et `classNames.day` pour passer de `h-9 w-9` à ~`h-20 w-full` afin d'avoir la place d'afficher les points. Fait localement dans `AppointmentsCalendar` via la prop `classNames`, sans toucher au composant `ui/calendar` global.
+- Les couleurs (rouge urgence, vert non-urgent, bleu primary pour aujourd'hui) viennent des tokens existants (`destructive`, `secondary`, `primary`).
+- Aucune modification backend.
 
 ## Fichiers touchés
 
-- `backend/app/models/schemas.py` — ajouter `channel` optionnel.
-- `backend/app/routes/chat.py` — passer `channel` au service.
-- `backend/app/services/ai_service.py` — logique voice (slots numérotés + épellation email).
+- **Créé** : `src/components/admin/AppointmentsCalendar.tsx`
+- **Modifié** : `src/pages/Admin.tsx` (ajout toggle vue, branchement calendrier, filtres déplacés sous l'onglet tableau)
 
-## Action côté n8n (à faire par l'utilisateur après merge)
+## Hors scope
 
-Dans le node HTTP qui appelle `/chat`, ajouter au JSON body :
-
-```json
-{ "message": "{{$json.SpeechResult}}", "session_id": "{{$json.CallSid}}", "channel": "voice" }
-```
+- Vues semaine/jour, drag-and-drop, édition d'un RDV, création depuis le calendrier.
+- Modifications backend ou du chatbot/voicebot.
