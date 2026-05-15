@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import StatsCards, { type Stats } from "@/components/admin/StatsCards";
 import StatsCharts from "@/components/admin/StatsCharts";
+import AppointmentsCalendar from "@/components/admin/AppointmentsCalendar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { exportToCsv } from "@/lib/csv";
 import {
   AlertDialog,
@@ -193,6 +195,7 @@ const Admin = () => {
   );
   const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
+  const [view, setView] = useState<"calendar" | "table">("calendar");
 
   const queryClient = useQueryClient();
 
@@ -288,6 +291,49 @@ const Admin = () => {
         <StatsCards stats={stats} loading={statsLoading} />
         <StatsCharts stats={stats} loading={statsLoading} />
 
+        {/* View toggle */}
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <Tabs value={view} onValueChange={(v) => setView(v as "calendar" | "table")}>
+            <TabsList>
+              <TabsTrigger value="calendar">
+                <CalendarIcon size={14} className="mr-1.5" />
+                Calendrier
+              </TabsTrigger>
+              <TabsTrigger value="table">Tous les RDV</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={(view === "table" ? filtered.length : data?.length ?? 0) === 0}
+            >
+              <Download size={14} />
+              Exporter CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw size={14} className={cn(isFetching && "animate-spin")} />
+              Actualiser
+            </Button>
+          </div>
+        </div>
+
+        {view === "calendar" && (
+          <AppointmentsCalendar
+            appointments={data ?? []}
+            onDelete={(id) => deleteMutation.mutate(id)}
+            isDeleting={deleteMutation.isPending}
+          />
+        )}
+
+        {view === "table" && (
+          <>
         {/* Filters */}
         <Card className="p-4 mb-6 shadow-card">
           <div className="flex flex-col md:flex-row md:items-end gap-4 flex-wrap">
@@ -352,27 +398,6 @@ const Admin = () => {
               <span className="text-sm text-muted-foreground">
                 {filtered.length} résultat{filtered.length > 1 ? "s" : ""}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExport}
-                disabled={filtered.length === 0}
-              >
-                <Download size={14} />
-                Exporter CSV
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refetch()}
-                disabled={isFetching}
-              >
-                <RefreshCw
-                  size={14}
-                  className={cn(isFetching && "animate-spin")}
-                />
-                Actualiser
-              </Button>
             </div>
           </div>
         </Card>
@@ -508,6 +533,8 @@ const Admin = () => {
             </Table>
           </div>
         </Card>
+          </>
+        )}
       </main>
     </div>
   );
