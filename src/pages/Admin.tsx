@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import StatsCards, { type Stats } from "@/components/admin/StatsCards";
 import StatsCharts from "@/components/admin/StatsCharts";
+import AppointmentsCalendar from "@/components/admin/AppointmentsCalendar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { exportToCsv } from "@/lib/csv";
 import {
   AlertDialog,
