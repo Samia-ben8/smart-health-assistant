@@ -2,9 +2,9 @@ import { motion } from "framer-motion";
 import { Phone, Mail, MapPin } from "lucide-react";
 
 const contacts = [
-  { icon: Phone, label: "Téléphone", value: "+213 XX XXX XXXX" },
-  { icon: Mail, label: "Email", value: "contact@cabinetmed-ai.dz" },
-  { icon: MapPin, label: "Adresse", value: "Alger, Algérie" },
+  { icon: Phone, label: "Téléphone", value: "+1(814)846-0153" },
+  { icon: Mail, label: "Email", value: "contact@cabinetmed-ai.ma" },
+  { icon: MapPin, label: "Adresse", value: "Casablanca, Maroc" },
 ];
 
 const ContactSection = () => {
